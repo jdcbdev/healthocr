@@ -10,7 +10,7 @@ def generate_prompt(text):
     It's just an example. You might need to write custom logic based on your use-case.
     """
     # TODO: Update this to suit your use-case
-    prompt = f"The following text is a medical document:\n\n{text}\n\nIdentify the patient's name, birthdate, and age from this document."
+    prompt = f"The following text is a medical document:\n\n{text}\n\nIdentify the name, birthdate, and age from this document."
     return prompt
 
 def parse_gpt3_output(gpt3_output):
