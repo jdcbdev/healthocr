@@ -27,8 +27,11 @@ DEBUG = True
 ALLOWED_HOSTS = ['xocr.retasoh.com']
 CSRF_TRUSTED_ORIGINS = ['https://xocr.retasoh.com']
 
-# Application definition
+# CELERY SETTINGS
+CELERY_BROKER_URL = 'redis://localhost:6379'
+CELERY_RESULT_BACKEND = 'redis://localhost:6379'
 
+# Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
