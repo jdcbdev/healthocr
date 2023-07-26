@@ -9,3 +9,9 @@ class MedicalRecord(models.Model):
 
     def __str__(self):
         return self.text[:50]
+
+    def update_fields(self, name, birthdate, age):
+        self.name = name
+        self.birthdate = birthdate
+        self.age = age
+        self.save()

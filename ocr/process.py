@@ -3,43 +3,40 @@ from dateutil.parser import parse as parse_date
 from celery import shared_task
 from healthocr.celery import app
 import math
+from .models import MedicalRecord
 
 # Set OpenAI key
-openai.api_key = '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'
+openai.api_key = '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'
 
 def generate_prompt(text):
-    """
-    This function generates a suitable prompt for GPT-3 based on the input text.
-    It's just an example. You might need to write custom logic based on your use-case.
-    """
-    # TODO: Update this to suit your use-case
-    prompt = f"The following text is a medical document:\n\n{text}\n\nIdentify the name, birthdate, and age from this document."
+    prompt = f"The text is a medical document:\n\n{text}\n\nIdentify name, birthdate, and age from this document."
     return prompt
 
 def parse_gpt3_output(gpt3_output):
-    """
-    This function extracts name, birthdate, and age from GPT-3 output.
-    It's just an example. You might need to write custom logic based on your use-case.
-    """
-    # TODO: Update this to suit your use-case
     lines = gpt3_output.split('\n')
 
-    name = lines[0].replace("Name:", "").strip()
-    birthdate_str = lines[1].replace("Birthdate:", "").strip()
-    birthdate = parse_date(birthdate_str.strip())
-    
-    age_str = lines[2].replace("Age:", "").strip()
+    name = None
+    birthdate = None
+    age = None
 
-    # Extract numeric part from age_str
-    age = ''.join(filter(str.isdigit, age_str))
-    age = int(age) if age else None
+    for line in lines:
+        if "Name:" in line:
+            name = line.replace("Name:", "").strip()
+        elif "Birthdate:" in line:
+            birthdate_str = line.replace("Birthdate:", "").strip()
+            birthdate_str = birthdate_str.replace("(DD/MM/YYYY)", "").strip()  # Remove date format hint
+            birthdate = parse_date(birthdate_str)
+        elif "Age:" in line:
+            age_str = line.replace("Age:", "").strip()
+            age = ''.join(filter(str.isdigit, age_str))
+            age = int(age) if age else None
 
     return name, birthdate, age
 
 @app.task
-def extract_info_with_gpt3(text):
+def extract_info_with_gpt3(text, record_id):
     """
-    This function takes in text, processes it using GPT-3 and
+    This function takes in text and a record ID, processes the text using GPT-3 and
     returns extracted name, birthdate, and age.
     """
     # Split text into chunks
@@ -54,21 +51,31 @@ def extract_info_with_gpt3(text):
     all_ages = []
     for text_chunk in text_chunks:
         # Generate a suitable prompt for GPT-3 based on the input text
-        prompt = generate_prompt(text_chunk)
+        messages = [
+            {"role": "system", "content": "The text is a medical document."},
+            {"role": "user", "content": text_chunk},
+            {"role": "assistant", "content": "Identify name, birthdate, and age from this document."},
+        ]
 
         # Use the GPT-3 "davinci" model to generate a response
-        response = openai.Completion.create(engine="gpt-4", prompt=prompt, max_tokens=8000)  # adjust max tokens as needed
+        response = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=messages, max_tokens=2000)
 
         # Extract info from GPT-3 response
-        name, birthdate, age = parse_gpt3_output(response.choices[0].text.strip())
+        name, birthdate, age = parse_gpt3_output(response['choices'][0]['message']['content'].strip())
         all_names.append(name)
         all_birthdates.append(birthdate)
         all_ages.append(age)
 
     # Combine extracted info from all chunks
-    # TODO: Add your own logic to combine the info. Here we're just taking the most common ones.
-    name = max(all_names, key=all_names.count)
-    birthdate = max(all_birthdates, key=all_birthdates.count)
-    age = max(all_ages, key=all_ages.count)
+    name = max(set(all_names), key=all_names.count)
+    birthdate = max(set(all_birthdates), key=all_birthdates.count)
+    age = max(set(all_ages), key=all_ages.count)
+
+    # Update the MedicalRecord with the extracted data
+    record = MedicalRecord.objects.get(id=record_id)
+    record.name = name
+    record.birthdate = birthdate
+    record.age = age
+    record.save()
 
     return name, birthdate, age

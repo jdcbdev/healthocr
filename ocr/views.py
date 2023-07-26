@@ -23,27 +23,21 @@ def upload_document(request):
             # Convert PDF to images
             images = convert_from_path(temp_file_path)
 
-            # Pick the first image (first page)
-            image = images[0]
+            # Perform OCR on all images, save texts in a list
+            all_texts = [pytesseract.image_to_string(image) for image in images]
 
-            # Perform OCR on the first image
-            text = pytesseract.image_to_string(image)
+            # Join all texts into a single string
+            full_text = "\n".join(all_texts)
 
-            # Use GPT-3 to extract name, birthdate, and age
-            task = extract_info_with_gpt3.delay(text)
-
-            # Create a new MedicalRecord
-            record = MedicalRecord(name='Pending', text=text, task_id=task.id)
+            # Create a new MedicalRecord with the full text
+            record = MedicalRecord(name='Pending', text=full_text)
             record.save()
 
-            # Wait for the task to finish and get the result
-            task.wait()
+            # Use GPT-3 to extract name, birthdate, and age from the first page's text
+            task = extract_info_with_gpt3.apply_async(args=[all_texts[0], record.id])
 
-            # Update the MedicalRecord with the extracted information
-            name, birthdate, age = task.result
-            record.name = name
-            record.birthdate = birthdate
-            record.age = age
+            # Update the record with the task_id
+            record.task_id = task.id
             record.save()
 
             return redirect('upload_document')
